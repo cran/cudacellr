@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="Yaoxiang Li" />
+
+
+<title>A native SeuratObject v5 workflow</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">A native SeuratObject v5 workflow</h1>
+<h4 class="author">Yaoxiang Li</h4>
+
+
+
+<p><code>cudacell_seurat()</code> runs the complete cudacellr
+preprocessing, PCA, and exact nearest-neighbour workflow while keeping
+every result in a native Seurat v5 subobject. The adapter requires only
+<code>SeuratObject &gt;= 5.0.0</code>; installing the full Seurat
+package is not necessary.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">install.packages</span>(<span class="st">&quot;SeuratObject&quot;</span>)</span></code></pre></div>
+<div id="start-with-a-populated-object" class="section level2">
+<h2>Start with a populated object</h2>
+<p>This example contains a second assay, cell metadata, identities, a
+reduction, miscellaneous data, and a tool record. The workflow returns a
+modified copy and retains all of them.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(cudacellr)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="fu">library</span>(Matrix)</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>)</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>counts <span class="ot">&lt;-</span> <span class="fu">Matrix</span>(</span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>  <span class="fu">matrix</span>(</span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>    <span class="fu">rpois</span>(<span class="dv">80</span> <span class="sc">*</span> <span class="dv">30</span>, <span class="at">lambda =</span> <span class="dv">2</span>),</span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a>    <span class="at">nrow =</span> <span class="dv">80</span>,</span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>    <span class="at">dimnames =</span> <span class="fu">list</span>(</span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a>      <span class="fu">paste0</span>(<span class="st">&quot;gene_&quot;</span>, <span class="fu">seq_len</span>(<span class="dv">80</span>)),</span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a>      <span class="fu">paste0</span>(<span class="st">&quot;cell_&quot;</span>, <span class="fu">seq_len</span>(<span class="dv">30</span>))</span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a>    )</span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a>  ),</span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a>  <span class="at">sparse =</span> <span class="cn">TRUE</span></span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a>)</span>
+<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a>counts[<span class="dv">1</span>, ] <span class="ot">&lt;-</span> counts[<span class="dv">1</span>, ] <span class="sc">+</span> <span class="dv">1</span></span>
+<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a></span>
+<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a>object <span class="ot">&lt;-</span> SeuratObject<span class="sc">::</span><span class="fu">CreateSeuratObject</span>(</span>
+<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a>  <span class="at">counts =</span> counts,</span>
+<span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a>  <span class="at">assay =</span> <span class="st">&quot;RNA&quot;</span>,</span>
+<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a>  <span class="at">meta.data =</span> <span class="fu">data.frame</span>(</span>
+<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a>    <span class="at">batch =</span> <span class="fu">rep</span>(<span class="fu">c</span>(<span class="st">&quot;one&quot;</span>, <span class="st">&quot;two&quot;</span>), <span class="at">each =</span> <span class="dv">15</span>),</span>
+<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a>    <span class="at">row.names =</span> <span class="fu">colnames</span>(counts)</span>
+<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a>  ),</span>
+<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a>  <span class="at">project =</span> <span class="st">&quot;preserved-project&quot;</span></span>
+<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a>)</span>
+<span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a><span class="co">#&gt; Warning: Feature names cannot have underscores (&#39;_&#39;), replacing with dashes</span></span>
+<span id="cb2-28"><a href="#cb2-28" tabindex="-1"></a><span class="co">#&gt; (&#39;-&#39;)</span></span>
+<span id="cb2-29"><a href="#cb2-29" tabindex="-1"></a>object[[<span class="st">&quot;ADT&quot;</span>]] <span class="ot">&lt;-</span> SeuratObject<span class="sc">::</span><span class="fu">CreateAssay5Object</span>(</span>
+<span id="cb2-30"><a href="#cb2-30" tabindex="-1"></a>  <span class="at">counts =</span> counts[<span class="fu">seq_len</span>(<span class="dv">5</span>), , <span class="at">drop =</span> <span class="cn">FALSE</span>]</span>
+<span id="cb2-31"><a href="#cb2-31" tabindex="-1"></a>)</span>
+<span id="cb2-32"><a href="#cb2-32" tabindex="-1"></a><span class="co">#&gt; Warning: Feature names cannot have underscores (&#39;_&#39;), replacing with dashes</span></span>
+<span id="cb2-33"><a href="#cb2-33" tabindex="-1"></a><span class="co">#&gt; (&#39;-&#39;)</span></span>
+<span id="cb2-34"><a href="#cb2-34" tabindex="-1"></a>object[[<span class="st">&quot;existing_pca&quot;</span>]] <span class="ot">&lt;-</span> SeuratObject<span class="sc">::</span><span class="fu">CreateDimReducObject</span>(</span>
+<span id="cb2-35"><a href="#cb2-35" tabindex="-1"></a>  <span class="at">embeddings =</span> <span class="fu">matrix</span>(</span>
+<span id="cb2-36"><a href="#cb2-36" tabindex="-1"></a>    <span class="fu">rnorm</span>(<span class="fu">ncol</span>(counts) <span class="sc">*</span> <span class="dv">2</span>),</span>
+<span id="cb2-37"><a href="#cb2-37" tabindex="-1"></a>    <span class="at">nrow =</span> <span class="fu">ncol</span>(counts),</span>
+<span id="cb2-38"><a href="#cb2-38" tabindex="-1"></a>    <span class="at">dimnames =</span> <span class="fu">list</span>(<span class="fu">colnames</span>(counts), <span class="fu">c</span>(<span class="st">&quot;OLDPC_1&quot;</span>, <span class="st">&quot;OLDPC_2&quot;</span>))</span>
+<span id="cb2-39"><a href="#cb2-39" tabindex="-1"></a>  ),</span>
+<span id="cb2-40"><a href="#cb2-40" tabindex="-1"></a>  <span class="at">assay =</span> <span class="st">&quot;RNA&quot;</span>,</span>
+<span id="cb2-41"><a href="#cb2-41" tabindex="-1"></a>  <span class="at">key =</span> <span class="st">&quot;OLDPC_&quot;</span></span>
+<span id="cb2-42"><a href="#cb2-42" tabindex="-1"></a>)</span>
+<span id="cb2-43"><a href="#cb2-43" tabindex="-1"></a>SeuratObject<span class="sc">::</span><span class="fu">Idents</span>(object) <span class="ot">&lt;-</span> <span class="fu">factor</span>(</span>
+<span id="cb2-44"><a href="#cb2-44" tabindex="-1"></a>  <span class="fu">rep</span>(<span class="fu">c</span>(<span class="st">&quot;A&quot;</span>, <span class="st">&quot;B&quot;</span>), <span class="at">each =</span> <span class="dv">15</span>)</span>
+<span id="cb2-45"><a href="#cb2-45" tabindex="-1"></a>)</span>
+<span id="cb2-46"><a href="#cb2-46" tabindex="-1"></a>SeuratObject<span class="sc">::</span><span class="fu">Misc</span>(object, <span class="at">slot =</span> <span class="st">&quot;owner&quot;</span>) <span class="ot">&lt;-</span> <span class="st">&quot;unchanged&quot;</span></span>
+<span id="cb2-47"><a href="#cb2-47" tabindex="-1"></a>add_example_tool <span class="ot">&lt;-</span> <span class="cf">function</span>(x) {</span>
+<span id="cb2-48"><a href="#cb2-48" tabindex="-1"></a>  SeuratObject<span class="sc">::</span><span class="fu">Tool</span>(x) <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">owner =</span> <span class="st">&quot;unchanged&quot;</span>)</span>
+<span id="cb2-49"><a href="#cb2-49" tabindex="-1"></a>  x</span>
+<span id="cb2-50"><a href="#cb2-50" tabindex="-1"></a>}</span>
+<span id="cb2-51"><a href="#cb2-51" tabindex="-1"></a>object <span class="ot">&lt;-</span> <span class="fu">add_example_tool</span>(object)</span>
+<span id="cb2-52"><a href="#cb2-52" tabindex="-1"></a>existing_tool_names <span class="ot">&lt;-</span> SeuratObject<span class="sc">::</span><span class="fu">Tool</span>(object)</span></code></pre></div>
+</div>
+<div id="run-the-workflow" class="section level2">
+<h2>Run the workflow</h2>
+<p>Input assay and layer names are exact. <code>assay = NULL</code> uses
+the default assay, while <code>layer = &quot;counts&quot;</code> is explicit by
+default.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>result <span class="ot">&lt;-</span> <span class="fu">cudacell_seurat</span>(</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  object,</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  <span class="at">assay =</span> <span class="st">&quot;RNA&quot;</span>,</span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>  <span class="at">layer =</span> <span class="st">&quot;counts&quot;</span>,</span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>  <span class="at">n_hvg =</span> <span class="dv">30</span>,</span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>  <span class="at">n_components =</span> <span class="dv">5</span>,</span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>  <span class="at">k =</span> <span class="dv">5</span>,</span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>  <span class="at">batch_size =</span> <span class="dv">8</span>,</span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a>  <span class="at">device =</span> <span class="st">&quot;cpu&quot;</span></span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a>)</span>
+<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a></span>
+<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a>SeuratObject<span class="sc">::</span><span class="fu">Assays</span>(result)</span>
+<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a><span class="co">#&gt; [1] &quot;RNA&quot;      &quot;ADT&quot;      &quot;CUDACELL&quot;</span></span>
+<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a>SeuratObject<span class="sc">::</span><span class="fu">Reductions</span>(result)</span>
+<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a><span class="co">#&gt; [1] &quot;existing_pca&quot; &quot;cudacell_pca&quot;</span></span>
+<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a>SeuratObject<span class="sc">::</span><span class="fu">Neighbors</span>(result)</span>
+<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a><span class="co">#&gt; [1] &quot;cudacell_knn&quot;</span></span></code></pre></div>
+<p>The default outputs use namespaced native locations:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>normalized <span class="ot">&lt;-</span> SeuratObject<span class="sc">::</span><span class="fu">LayerData</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  result[[<span class="st">&quot;CUDACELL&quot;</span>]],</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">layer =</span> <span class="st">&quot;data&quot;</span>,</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="at">fast =</span> <span class="cn">FALSE</span></span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>)</span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>normalized[<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>, <span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>]</span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a><span class="co">#&gt; 3 x 3 sparse Matrix of class &quot;dgCMatrix&quot;</span></span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a><span class="co">#&gt;          cell_1   cell_2   cell_3</span></span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a><span class="co">#&gt; gene-1 5.652808 5.208492 5.773037</span></span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt; gene-2 5.430541 4.120760 4.861401</span></span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt; gene-3 4.057303 4.120760 4.861401</span></span>
+<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a></span>
+<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a>SeuratObject<span class="sc">::</span><span class="fu">Embeddings</span>(result[[<span class="st">&quot;cudacell_pca&quot;</span>]])[<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>, , drop <span class="ot">=</span> <span class="cn">FALSE</span>]</span>
+<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="co">#&gt;        CUDACELLPC_1 CUDACELLPC_2 CUDACELLPC_3 CUDACELLPC_4 CUDACELLPC_5</span></span>
+<span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a><span class="co">#&gt; cell_1    -1.010505     2.472902    -1.934263    1.0690482  -0.05279964</span></span>
+<span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a><span class="co">#&gt; cell_2    -1.130595     1.670652     1.065843   -2.2639677  -3.15504850</span></span>
+<span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a><span class="co">#&gt; cell_3     2.060318     3.225506    -1.481663    0.6235578  -0.62236913</span></span>
+<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a>SeuratObject<span class="sc">::</span><span class="fu">Indices</span>(result[[<span class="st">&quot;cudacell_knn&quot;</span>]])[<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>, , drop <span class="ot">=</span> <span class="cn">FALSE</span>]</span>
+<span id="cb4-19"><a href="#cb4-19" tabindex="-1"></a><span class="co">#&gt;        neighbor_1 neighbor_2 neighbor_3 neighbor_4 neighbor_5</span></span>
+<span id="cb4-20"><a href="#cb4-20" tabindex="-1"></a><span class="co">#&gt; cell_1          9         18         17          8         29</span></span>
+<span id="cb4-21"><a href="#cb4-21" tabindex="-1"></a><span class="co">#&gt; cell_2          6         21         29         28         23</span></span>
+<span id="cb4-22"><a href="#cb4-22" tabindex="-1"></a><span class="co">#&gt; cell_3         18         29         26          1          9</span></span>
+<span id="cb4-23"><a href="#cb4-23" tabindex="-1"></a>result[[<span class="st">&quot;CUDACELL&quot;</span>]][[]][</span>
+<span id="cb4-24"><a href="#cb4-24" tabindex="-1"></a>  <span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>,</span>
+<span id="cb4-25"><a href="#cb4-25" tabindex="-1"></a>  <span class="fu">c</span>(</span>
+<span id="cb4-26"><a href="#cb4-26" tabindex="-1"></a>    <span class="st">&quot;cudacell_mean&quot;</span>,</span>
+<span id="cb4-27"><a href="#cb4-27" tabindex="-1"></a>    <span class="st">&quot;cudacell_variance&quot;</span>,</span>
+<span id="cb4-28"><a href="#cb4-28" tabindex="-1"></a>    <span class="st">&quot;cudacell_dispersion&quot;</span>,</span>
+<span id="cb4-29"><a href="#cb4-29" tabindex="-1"></a>    <span class="st">&quot;cudacell_hvg&quot;</span>,</span>
+<span id="cb4-30"><a href="#cb4-30" tabindex="-1"></a>    <span class="st">&quot;cudacell_hvg_rank&quot;</span></span>
+<span id="cb4-31"><a href="#cb4-31" tabindex="-1"></a>  )</span>
+<span id="cb4-32"><a href="#cb4-32" tabindex="-1"></a>]</span>
+<span id="cb4-33"><a href="#cb4-33" tabindex="-1"></a><span class="co">#&gt;        cudacell_mean cudacell_variance cudacell_dispersion cudacell_hvg</span></span>
+<span id="cb4-34"><a href="#cb4-34" tabindex="-1"></a><span class="co">#&gt; gene-1      5.241438         0.2898075           0.0552916        FALSE</span></span>
+<span id="cb4-35"><a href="#cb4-35" tabindex="-1"></a><span class="co">#&gt; gene-2      4.517405         1.7976247           0.3979330        FALSE</span></span>
+<span id="cb4-36"><a href="#cb4-36" tabindex="-1"></a><span class="co">#&gt; gene-3      4.028052         2.8141622           0.6986410        FALSE</span></span>
+<span id="cb4-37"><a href="#cb4-37" tabindex="-1"></a><span class="co">#&gt;        cudacell_hvg_rank</span></span>
+<span id="cb4-38"><a href="#cb4-38" tabindex="-1"></a><span class="co">#&gt; gene-1                80</span></span>
+<span id="cb4-39"><a href="#cb4-39" tabindex="-1"></a><span class="co">#&gt; gene-2                73</span></span>
+<span id="cb4-40"><a href="#cb4-40" tabindex="-1"></a><span class="co">#&gt; gene-3                50</span></span></code></pre></div>
+<p><code>cudacell_hvg_rank</code> is the one-based global dispersion
+rank across every input feature. <code>cudacell_hvg</code> marks the
+selected top <code>n_hvg</code> features, which are also registered
+through <code>SeuratObject::VariableFeatures()</code>.</p>
+<p>The exact directed kNN result is stored as a <code>Neighbor</code>,
+including both integer indices and distances. The PCA
+<code>DimReduc</code> includes cell embeddings, feature loadings,
+standard deviations, and the <code>CUDACELLPC_</code> key.</p>
+</div>
+<div id="verify-preservation" class="section level2">
+<h2>Verify preservation</h2>
+<p>The input object is unchanged, and unrelated state survives in the
+result:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="fu">identical</span>(</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>  SeuratObject<span class="sc">::</span><span class="fu">LayerData</span>(object[[<span class="st">&quot;RNA&quot;</span>]], <span class="st">&quot;counts&quot;</span>),</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>  SeuratObject<span class="sc">::</span><span class="fu">LayerData</span>(result[[<span class="st">&quot;RNA&quot;</span>]], <span class="st">&quot;counts&quot;</span>)</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>)</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a><span class="co">#&gt; [1] TRUE</span></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a><span class="fu">identical</span>(object[[<span class="st">&quot;ADT&quot;</span>]], result[[<span class="st">&quot;ADT&quot;</span>]])</span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="co">#&gt; [1] TRUE</span></span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="fu">identical</span>(object[[<span class="st">&quot;existing_pca&quot;</span>]], result[[<span class="st">&quot;existing_pca&quot;</span>]])</span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt; [1] TRUE</span></span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="fu">identical</span>(SeuratObject<span class="sc">::</span><span class="fu">Idents</span>(object), SeuratObject<span class="sc">::</span><span class="fu">Idents</span>(result))</span>
+<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a><span class="co">#&gt; [1] TRUE</span></span>
+<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a><span class="fu">identical</span>(</span>
+<span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a>  SeuratObject<span class="sc">::</span><span class="fu">Misc</span>(object, <span class="at">slot =</span> <span class="st">&quot;owner&quot;</span>),</span>
+<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a>  SeuratObject<span class="sc">::</span><span class="fu">Misc</span>(result, <span class="at">slot =</span> <span class="st">&quot;owner&quot;</span>)</span>
+<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a>)</span>
+<span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a><span class="co">#&gt; [1] TRUE</span></span>
+<span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a><span class="fu">all</span>(<span class="fu">vapply</span>(</span>
+<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a>  existing_tool_names,</span>
+<span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a>  <span class="cf">function</span>(name) {</span>
+<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a>    <span class="fu">identical</span>(</span>
+<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a>      SeuratObject<span class="sc">::</span><span class="fu">Tool</span>(object, <span class="at">slot =</span> name),</span>
+<span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a>      SeuratObject<span class="sc">::</span><span class="fu">Tool</span>(result, <span class="at">slot =</span> name)</span>
+<span id="cb5-23"><a href="#cb5-23" tabindex="-1"></a>    )</span>
+<span id="cb5-24"><a href="#cb5-24" tabindex="-1"></a>  },</span>
+<span id="cb5-25"><a href="#cb5-25" tabindex="-1"></a>  <span class="fu">logical</span>(<span class="dv">1</span>)</span>
+<span id="cb5-26"><a href="#cb5-26" tabindex="-1"></a>))</span>
+<span id="cb5-27"><a href="#cb5-27" tabindex="-1"></a><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
+<p>cudacellr adds its own deterministic <code>cudacell_seurat</code>
+tool record without replacing existing tool records.</p>
+</div>
+<div id="collision-and-realization-safety" class="section level2">
+<h2>Collision and realization safety</h2>
+<p>Every target assay, reduction, neighbour, feature-metadata column,
+cell-metadata column, tool record, and Seurat key is checked before
+device selection, layer access, realization, or numerical work. A second
+run with the same names fails:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">cudacell_seurat</span>(</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>  result,</span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>  <span class="at">n_hvg =</span> <span class="dv">30</span>,</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>  <span class="at">n_components =</span> <span class="dv">5</span>,</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>  <span class="at">k =</span> <span class="dv">5</span>,</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>  <span class="at">device =</span> <span class="st">&quot;cpu&quot;</span></span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>)</span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="co">#&gt; Error:</span></span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt; ! cudacellr output fields already exist: assay &#39;CUDACELL&#39;, reduction &#39;cudacell_pca&#39;, neighbor &#39;cudacell_knn&#39;, cell metadata &#39;cudacell_size_factor&#39;, tool &#39;cudacell_seurat&#39;. Set `overwrite = TRUE` to replace only these fields.</span></span></code></pre></div>
+<p>Use <code>overwrite = TRUE</code> only when replacing those exact
+cudacellr outputs is intentional. Cross-type name or key collisions are
+never overwritten.</p>
+<p>Only ordinary in-memory <code>matrix</code> and <code>Matrix</code>
+layers are accepted by default. Delayed, on-disk, and other matrix-like
+layers are not silently collected. Set <code>realize = TRUE</code> only
+after confirming that the selected layer fits in memory; the original
+layer class and materialization decision are recorded.</p>
+<p>For <code>device = &quot;cuda&quot;</code>, CUDA availability is validated
+before the layer is read or realized. The request remains strict and
+never silently falls back to CPU.</p>
+</div>
+<div id="provenance" class="section level2">
+<h2>Provenance</h2>
+<p>The native tool record contains identifiers, parameters, output
+locations, and the same ordered <code>cudaverse-stage/1</code> compute
+provenance used by the matrix and SingleCellExperiment workflows:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">cuda_provenance</span>(result)</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="co">#&gt; &lt;cuda_provenance schema=cudaverse-stage/1 stages=6 compute=cpu&gt;</span></span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="co">#&gt;                   stage requested_device device backend   selection_reason</span></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt;           normalization        fixed-cpu    cpu  Matrix algorithm_cpu_only</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt;                     hvg        fixed-cpu    cpu  Matrix algorithm_cpu_only</span></span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="co">#&gt;       pca_preprocessing              cpu    cpu   stats       explicit_cpu</span></span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">#&gt;       pca_decomposition              cpu    cpu   stats       explicit_cpu</span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt;            knn_distance              cpu    cpu    base       explicit_cpu</span></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt;  knn_neighbor_selection              cpu    cpu    base       explicit_cpu</span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt;  fallback output_device</span></span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="co">#&gt;     FALSE           cpu</span></span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co">#&gt;     FALSE           cpu</span></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt;     FALSE           cpu</span></span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a><span class="co">#&gt;     FALSE           cpu</span></span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a><span class="co">#&gt;     FALSE           cpu</span></span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a><span class="co">#&gt;     FALSE           cpu</span></span>
+<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a>SeuratObject<span class="sc">::</span><span class="fu">Tool</span>(result, <span class="at">slot =</span> <span class="st">&quot;cudacell_seurat&quot;</span>)<span class="sc">$</span>outputs</span>
+<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a><span class="co">#&gt; $assay</span></span>
+<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a><span class="co">#&gt; [1] &quot;CUDACELL&quot;</span></span>
+<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a><span class="co">#&gt; $layer</span></span>
+<span id="cb7-22"><a href="#cb7-22" tabindex="-1"></a><span class="co">#&gt; [1] &quot;data&quot;</span></span>
+<span id="cb7-23"><a href="#cb7-23" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a><span class="co">#&gt; $reduction</span></span>
+<span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a><span class="co">#&gt; [1] &quot;cudacell_pca&quot;</span></span>
+<span id="cb7-26"><a href="#cb7-26" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-27"><a href="#cb7-27" tabindex="-1"></a><span class="co">#&gt; $reduction_key</span></span>
+<span id="cb7-28"><a href="#cb7-28" tabindex="-1"></a><span class="co">#&gt; [1] &quot;CUDACELLPC_&quot;</span></span>
+<span id="cb7-29"><a href="#cb7-29" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-30"><a href="#cb7-30" tabindex="-1"></a><span class="co">#&gt; $neighbor</span></span>
+<span id="cb7-31"><a href="#cb7-31" tabindex="-1"></a><span class="co">#&gt; [1] &quot;cudacell_knn&quot;</span></span>
+<span id="cb7-32"><a href="#cb7-32" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-33"><a href="#cb7-33" tabindex="-1"></a><span class="co">#&gt; $feature_metadata</span></span>
+<span id="cb7-34"><a href="#cb7-34" tabindex="-1"></a><span class="co">#&gt; [1] &quot;cudacell_mean&quot;       &quot;cudacell_variance&quot;   &quot;cudacell_dispersion&quot;</span></span>
+<span id="cb7-35"><a href="#cb7-35" tabindex="-1"></a><span class="co">#&gt; [4] &quot;cudacell_hvg&quot;        &quot;cudacell_hvg_rank&quot;  </span></span>
+<span id="cb7-36"><a href="#cb7-36" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-37"><a href="#cb7-37" tabindex="-1"></a><span class="co">#&gt; $size_factor</span></span>
+<span id="cb7-38"><a href="#cb7-38" tabindex="-1"></a><span class="co">#&gt; [1] &quot;cudacell_size_factor&quot;</span></span>
+<span id="cb7-39"><a href="#cb7-39" tabindex="-1"></a>SeuratObject<span class="sc">::</span><span class="fu">Tool</span>(result, <span class="at">slot =</span> <span class="st">&quot;cudacell_seurat&quot;</span>)<span class="sc">$</span>parameters</span>
+<span id="cb7-40"><a href="#cb7-40" tabindex="-1"></a><span class="co">#&gt; $n_hvg</span></span>
+<span id="cb7-41"><a href="#cb7-41" tabindex="-1"></a><span class="co">#&gt; [1] 30</span></span>
+<span id="cb7-42"><a href="#cb7-42" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-43"><a href="#cb7-43" tabindex="-1"></a><span class="co">#&gt; $n_components</span></span>
+<span id="cb7-44"><a href="#cb7-44" tabindex="-1"></a><span class="co">#&gt; [1] 5</span></span>
+<span id="cb7-45"><a href="#cb7-45" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-46"><a href="#cb7-46" tabindex="-1"></a><span class="co">#&gt; $k</span></span>
+<span id="cb7-47"><a href="#cb7-47" tabindex="-1"></a><span class="co">#&gt; [1] 5</span></span>
+<span id="cb7-48"><a href="#cb7-48" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-49"><a href="#cb7-49" tabindex="-1"></a><span class="co">#&gt; $requested_device</span></span>
+<span id="cb7-50"><a href="#cb7-50" tabindex="-1"></a><span class="co">#&gt; [1] &quot;cpu&quot;</span></span>
+<span id="cb7-51"><a href="#cb7-51" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-52"><a href="#cb7-52" tabindex="-1"></a><span class="co">#&gt; $batch_size</span></span>
+<span id="cb7-53"><a href="#cb7-53" tabindex="-1"></a><span class="co">#&gt; [1] 8</span></span>
+<span id="cb7-54"><a href="#cb7-54" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-55"><a href="#cb7-55" tabindex="-1"></a><span class="co">#&gt; $scale_factor</span></span>
+<span id="cb7-56"><a href="#cb7-56" tabindex="-1"></a><span class="co">#&gt; [1] 10000</span></span>
+<span id="cb7-57"><a href="#cb7-57" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-58"><a href="#cb7-58" tabindex="-1"></a><span class="co">#&gt; $log1p</span></span>
+<span id="cb7-59"><a href="#cb7-59" tabindex="-1"></a><span class="co">#&gt; [1] TRUE</span></span>
+<span id="cb7-60"><a href="#cb7-60" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-61"><a href="#cb7-61" tabindex="-1"></a><span class="co">#&gt; $min_mean</span></span>
+<span id="cb7-62"><a href="#cb7-62" tabindex="-1"></a><span class="co">#&gt; [1] 0</span></span>
+<span id="cb7-63"><a href="#cb7-63" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-64"><a href="#cb7-64" tabindex="-1"></a><span class="co">#&gt; $scale</span></span>
+<span id="cb7-65"><a href="#cb7-65" tabindex="-1"></a><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

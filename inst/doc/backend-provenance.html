@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="Yaoxiang Li" />
+
+
+<title>Backend provenance and CUDA diagnostics</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Backend provenance and CUDA
+diagnostics</h1>
+<h4 class="author">Yaoxiang Li</h4>
+
+
+
+<p>Use <code>cudacellr</code> to run single-cell PCA and exact
+nearest-neighbour search on an NVIDIA GPU, then inspect the results
+through ordinary R objects. This guide shows how to prepare CUDA, run
+the workflow, and check which stages used the GPU. Normalization and
+highly variable feature (HVG) selection remain sparse CPU operations, so
+the complete workflow is deliberately hybrid.</p>
+<div id="prepare-cuda" class="section level2">
+<h2>Prepare CUDA</h2>
+<p>The native backend is included in <code>cudaverse</code>; you do not
+need torch or LibTorch. A Windows or Linux GPU machine needs an NVIDIA
+driver, cuBLAS 12, and cuSOLVER 11. Follow the <a href="https://cudaverse.github.io/cudaverse/articles/gpu-setup.html">platform
+setup guide</a> to install and verify these libraries. Current CUDA
+execution is unavailable on macOS.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="co"># install.packages(&quot;pak&quot;)</span></span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a>pak<span class="sc">::</span><span class="fu">pak</span>(<span class="st">&quot;cudaverse/cudacellr&quot;</span>)</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="fu">library</span>(cudacellr)</span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a>health <span class="ot">&lt;-</span> cudaverse<span class="sc">::</span><span class="fu">cuda_diagnostics</span>()</span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a>health<span class="sc">$</span>summary</span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a>health<span class="sc">$</span>next_steps</span>
+<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a>health<span class="sc">$</span>selected_backend  <span class="co"># &quot;native&quot; for the lightweight CUDA path</span></span>
+<span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a>cudaverse<span class="sc">::</span><span class="fu">cuda_select_device</span>(<span class="st">&quot;cuda&quot;</span>)</span></code></pre></div>
+<p>Run the CUDA chunks below on your configured GPU machine. They are
+displayed without execution when this article is built so installing or
+checking the R package does not require a GPU. The small CPU reference
+at the end is executed during the article build.</p>
+</div>
+<div id="prepare-a-count-matrix" class="section level2">
+<h2>Prepare a count matrix</h2>
+<p><code>cudacellr</code> expects features in rows and cells in columns.
+This small named matrix makes the example reproducible; replace it with
+your own count matrix for analysis.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">library</span>(cudacellr)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="fu">library</span>(Matrix)</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>)</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>counts <span class="ot">&lt;-</span> <span class="fu">matrix</span>(</span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>  <span class="fu">rpois</span>(<span class="dv">60</span> <span class="sc">*</span> <span class="dv">30</span>, <span class="at">lambda =</span> <span class="dv">2</span>),</span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>  <span class="at">nrow =</span> <span class="dv">60</span>,</span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a>  <span class="at">ncol =</span> <span class="dv">30</span>,</span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>  <span class="at">dimnames =</span> <span class="fu">list</span>(</span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a>    <span class="fu">paste0</span>(<span class="st">&quot;gene_&quot;</span>, <span class="fu">seq_len</span>(<span class="dv">60</span>)),</span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a>    <span class="fu">paste0</span>(<span class="st">&quot;cell_&quot;</span>, <span class="fu">seq_len</span>(<span class="dv">30</span>))</span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a>  )</span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a>)</span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a>counts[<span class="dv">1</span>, ] <span class="ot">&lt;-</span> counts[<span class="dv">1</span>, ] <span class="sc">+</span> <span class="dv">1</span></span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a>counts <span class="ot">&lt;-</span> <span class="fu">Matrix</span>(counts, <span class="at">sparse =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
+</div>
+<div id="normalize-select-features-and-run-pca-and-knn" class="section level2">
+<h2>Normalize, select features, and run PCA and kNN</h2>
+<p>One call reuses each preprocessing stage and returns normalized
+expression, feature statistics, the PCA model, and exact neighbours:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">cudacell_workflow</span>(</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  counts,</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  <span class="at">n_hvg =</span> <span class="dv">20</span>,</span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>  <span class="at">n_components =</span> <span class="dv">5</span>,</span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>  <span class="at">k =</span> <span class="dv">5</span>,</span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>  <span class="at">batch_size =</span> <span class="dv">8</span>,</span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>  <span class="at">device =</span> <span class="st">&quot;cuda&quot;</span></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>)</span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a></span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a>fit</span>
+<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a><span class="fu">head</span>(fit<span class="sc">$</span>pca<span class="sc">$</span>x)</span>
+<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a><span class="fu">head</span>(fit<span class="sc">$</span>neighbors<span class="sc">$</span>index)</span>
+<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a><span class="fu">head</span>(fit<span class="sc">$</span>neighbors<span class="sc">$</span>distance)</span>
+<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a><span class="fu">identical</span>(<span class="fu">rownames</span>(fit<span class="sc">$</span>pca<span class="sc">$</span>x), <span class="fu">colnames</span>(counts))</span>
+<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a><span class="fu">identical</span>(<span class="fu">rownames</span>(fit<span class="sc">$</span>neighbors<span class="sc">$</span>index), <span class="fu">colnames</span>(counts))</span></code></pre></div>
+<p>You can also call stages independently. For example, pass the PCA
+model directly to neighbour search:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>pca <span class="ot">&lt;-</span> <span class="fu">cuda_cell_pca</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  counts,</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">n_hvg =</span> <span class="dv">20</span>,</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="at">n_components =</span> <span class="dv">5</span>,</span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>  <span class="at">device =</span> <span class="st">&quot;cuda&quot;</span></span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>)</span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>neighbors <span class="ot">&lt;-</span> <span class="fu">cuda_cell_neighbors</span>(</span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a>  pca,</span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a>  <span class="at">k =</span> <span class="dv">5</span>,</span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a>  <span class="at">batch_size =</span> <span class="dv">8</span>,</span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a>  <span class="at">device =</span> <span class="st">&quot;cuda&quot;</span></span>
+<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a>)</span></code></pre></div>
+<p>Native PCA returns ordinary R score and loading matrices while
+retaining a device-side score cache. Passing the unmodified PCA result
+directly to kNN allows reuse of that cache without uploading the scores
+again. Distance blocks and deterministic top-k selection run on CUDA;
+the final neighbour indices and distances are returned as R matrices.
+The public PCA model is also materialized on the host, so this is not a
+promise that only the final neighbour output ever crosses the device
+boundary.</p>
+</div>
+<div id="read-the-provenance-table" class="section level2">
+<h2>Read the provenance table</h2>
+<p><code>cuda_provenance()</code> returns the ordered compute stages
+that produced an object, including inherited preprocessing:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>workflow_provenance <span class="ot">&lt;-</span> <span class="fu">cuda_provenance</span>(fit)</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>workflow_provenance</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="fu">attr</span>(workflow_provenance, <span class="st">&quot;compute_device&quot;</span>)</span></code></pre></div>
+<table>
+<colgroup>
+<col width="50%" />
+<col width="50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Column</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>requested_device</code></td>
+<td>An explicit or automatic request, a fixed CPU stage, or an inherited
+choice.</td>
+</tr>
+<tr class="even">
+<td><code>device</code></td>
+<td>Where that stage computed: <code>&quot;cpu&quot;</code> or
+<code>&quot;cuda&quot;</code>.</td>
+</tr>
+<tr class="odd">
+<td><code>backend</code></td>
+<td>The implementation, such as <code>Matrix</code>, <code>base</code>,
+<code>stats</code>, <code>native</code>, or the optional
+<code>torch</code> backend.</td>
+</tr>
+<tr class="even">
+<td><code>selection_reason</code></td>
+<td>Why that device was used, including fixed CPU algorithms, input
+transfers, or CUDA availability.</td>
+</tr>
+<tr class="odd">
+<td><code>fallback</code></td>
+<td>Whether an <code>&quot;auto&quot;</code> request used CPU because CUDA was
+unavailable.</td>
+</tr>
+<tr class="even">
+<td><code>output_device</code></td>
+<td>Where the stage result was materialized; a CUDA calculation can
+return an R object on CPU.</td>
+</tr>
+</tbody>
+</table>
+<p>The aggregate <code>compute_device</code> is <code>&quot;cpu&quot;</code> when
+all recorded stages use CPU, <code>&quot;cuda&quot;</code> when all use CUDA, and
+<code>&quot;hybrid&quot;</code> when they contain both. A successful
+<code>cudacell_workflow(..., device = &quot;cuda&quot;)</code> is hybrid because
+normalization and HVG selection run on CPU. Returning a result to R does
+not itself mean the calculation fell back to CPU.</p>
+</div>
+<div id="native-stage-boundaries" class="section level2">
+<h2>Native stage boundaries</h2>
+<p>These semantics describe the native backend in <code>cudaverse</code>
+0.4.1:</p>
+<table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Function</th>
+<th>Stage</th>
+<th>Device/backend semantics</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>cuda_normalize_counts()</code></td>
+<td><code>normalization</code></td>
+<td>CPU <code>Matrix</code> sparse operations.</td>
+</tr>
+<tr class="even">
+<td><code>cuda_hvg()</code></td>
+<td><code>hvg</code></td>
+<td>CPU <code>Matrix</code> feature statistics and base-R ranking.</td>
+</tr>
+<tr class="odd">
+<td><code>cuda_cell_pca()</code></td>
+<td><code>normalization</code>, <code>hvg</code></td>
+<td>CPU sparse preprocessing; selected features are materialized as a
+dense input matrix.</td>
+</tr>
+<tr class="even">
+<td><code>cuda_cell_pca()</code></td>
+<td><code>pca_preprocessing</code>, <code>pca_decomposition</code></td>
+<td>CUDA centring/scaling and decomposition with <code>native</code>;
+the public PCA model is returned to R.</td>
+</tr>
+<tr class="odd">
+<td><code>cuda_cell_pca()</code></td>
+<td><code>pca_scores_resident</code></td>
+<td>A retained CUDA score cache supports subsequent native
+operations.</td>
+</tr>
+<tr class="even">
+<td><code>cuda_cell_neighbors()</code></td>
+<td>inherited source stages</td>
+<td>Preserves PCA or other input provenance.</td>
+</tr>
+<tr class="odd">
+<td><code>cuda_cell_neighbors()</code></td>
+<td><code>knn_distance</code>, <code>knn_neighbor_selection</code></td>
+<td>CUDA distance blocks and deterministic top-k with
+<code>native</code>; final neighbour matrices are returned to R.</td>
+</tr>
+<tr class="even">
+<td><code>cudacell_workflow()</code></td>
+<td>all stages above</td>
+<td>Hybrid CPU preprocessing and CUDA PCA/kNN.</td>
+</tr>
+</tbody>
+</table>
+<p>The optional torch compatibility backend can have different
+boundaries: device-side neighbour selection depends on its stable-sort
+support, and older torch APIs may use a recorded CPU selection path.
+Neither torch nor LibTorch is needed for the native workflow shown here.
+Inspect the actual provenance table rather than assuming that every CUDA
+backend is identical.</p>
+<p>An upstream <code>cudasparse</code> input contributes prefixed source
+stages. Single-cell normalization still needs a CPU
+<code>dgCMatrix</code>; materializing a CUDA sparse input therefore
+records an <code>input_materialization</code> transfer.</p>
+</div>
+<div id="device-requests-and-failures" class="section level2">
+<h2>Device requests and failures</h2>
+<ul>
+<li><code>&quot;cuda&quot;</code> is strict: an unavailable runtime raises
+<code>cudaverse_cuda_unavailable</code> before single-cell preprocessing
+starts.</li>
+<li><code>&quot;auto&quot;</code> uses CUDA when eligible; otherwise the requested
+numerical stages run on CPU and record fallback with a reason.</li>
+<li><code>&quot;cpu&quot;</code> selects CPU computation for a reference run or a
+machine without CUDA.</li>
+<li>Fixed CPU stages such as normalization have
+<code>requested_device =   &quot;fixed-cpu&quot;</code> and
+<code>fallback = FALSE</code>. They are part of the workflow, not a
+failed GPU request.</li>
+<li>A CUDA execution error after selection is reported; the workflow
+does not retry silently on CPU.</li>
+</ul>
+<p>After changing drivers or CUDA library paths, restart R and run
+<code>cudaverse::cuda_diagnostics()</code> again. Its
+<code>summary</code> and <code>next_steps</code> fields help distinguish
+missing runtime libraries from a failed device self-test.</p>
+</div>
+<div id="plan-memory-and-workload-size" class="section level2">
+<h2>Plan memory and workload size</h2>
+<p>Normalization and HVG calculations retain sparse <code>Matrix</code>
+storage. <code>cuda_cell_pca()</code> then selects <code>n_hvg</code>
+rows and materializes a dense cell-by-feature matrix. One
+double-precision copy of this selected matrix uses roughly
+<code>8 * cells * n_hvg</code> bytes; centring, scaling, decomposition,
+and host/device copies require additional memory. Lower
+<code>n_hvg</code> when dense input memory is the constraint: the input
+is allocated before decomposition, so reducing <code>n_components</code>
+alone does not make that matrix smaller.</p>
+<p>The PCA model retains host scores/loadings and, for native CUDA,
+cached device scores. Remove unused models and call <code>gc()</code> to
+allow their storage to be released.
+<code>cudaverse::cuda_memory_info(&quot;cuda&quot;)</code> can help inspect device
+memory; whole-device usage can include other applications.</p>
+<p>Exact kNN remains quadratic in time but uses bounded distance blocks
+rather than retaining the full cell-by-cell matrix. The double distance
+block uses approximately <code>8 * min(batch_size, cells) * cells</code>
+bytes, plus backend workspace. Returned distances use about
+<code>8 * cells * k</code> bytes plus an integer index matrix. Lower
+<code>batch_size</code> to reduce peak memory; it does not change the
+exact neighbour definition or its original-row-index tie breaking.</p>
+<p>This tiny tutorial demonstrates the API, not a GPU speed advantage.
+Small inputs may be dominated by startup and transfer costs. Benchmark
+your complete workflow, including CPU normalization/HVG and transfers,
+before making performance claims about single-cell analysis.</p>
+</div>
+<div id="a-small-cpu-reference" class="section level2">
+<h2>A small CPU reference</h2>
+<p>The same API can produce a reference result without CUDA:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>reference <span class="ot">&lt;-</span> <span class="fu">cudacell_workflow</span>(</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>  counts,</span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>  <span class="at">n_hvg =</span> <span class="dv">20</span>,</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>  <span class="at">n_components =</span> <span class="dv">5</span>,</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>  <span class="at">k =</span> <span class="dv">5</span>,</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>  <span class="at">batch_size =</span> <span class="dv">8</span>,</span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  <span class="at">device =</span> <span class="st">&quot;cpu&quot;</span></span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>)</span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a>reference</span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt; &lt;cudacell_workflow features=60 cells=30 hvg=20 components=5 k=5 pca_device=cpu compute=cpu&gt;</span></span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a><span class="fu">identical</span>(<span class="fu">rownames</span>(reference<span class="sc">$</span>pca<span class="sc">$</span>x), <span class="fu">colnames</span>(counts))</span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a><span class="co">#&gt; [1] TRUE</span></span>
+<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a><span class="fu">identical</span>(<span class="fu">rownames</span>(reference<span class="sc">$</span>neighbors<span class="sc">$</span>index), <span class="fu">colnames</span>(counts))</span>
+<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a><span class="co">#&gt; [1] TRUE</span></span>
+<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a><span class="fu">cuda_provenance</span>(reference)</span>
+<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a><span class="co">#&gt; &lt;cuda_provenance schema=cudaverse-stage/1 stages=6 compute=cpu&gt;</span></span>
+<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a><span class="co">#&gt;                   stage requested_device device backend   selection_reason</span></span>
+<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a><span class="co">#&gt;           normalization        fixed-cpu    cpu  Matrix algorithm_cpu_only</span></span>
+<span id="cb6-20"><a href="#cb6-20" tabindex="-1"></a><span class="co">#&gt;                     hvg        fixed-cpu    cpu  Matrix algorithm_cpu_only</span></span>
+<span id="cb6-21"><a href="#cb6-21" tabindex="-1"></a><span class="co">#&gt;       pca_preprocessing              cpu    cpu   stats       explicit_cpu</span></span>
+<span id="cb6-22"><a href="#cb6-22" tabindex="-1"></a><span class="co">#&gt;       pca_decomposition              cpu    cpu   stats       explicit_cpu</span></span>
+<span id="cb6-23"><a href="#cb6-23" tabindex="-1"></a><span class="co">#&gt;            knn_distance              cpu    cpu    base       explicit_cpu</span></span>
+<span id="cb6-24"><a href="#cb6-24" tabindex="-1"></a><span class="co">#&gt;  knn_neighbor_selection              cpu    cpu    base       explicit_cpu</span></span>
+<span id="cb6-25"><a href="#cb6-25" tabindex="-1"></a><span class="co">#&gt;  fallback output_device</span></span>
+<span id="cb6-26"><a href="#cb6-26" tabindex="-1"></a><span class="co">#&gt;     FALSE           cpu</span></span>
+<span id="cb6-27"><a href="#cb6-27" tabindex="-1"></a><span class="co">#&gt;     FALSE           cpu</span></span>
+<span id="cb6-28"><a href="#cb6-28" tabindex="-1"></a><span class="co">#&gt;     FALSE           cpu</span></span>
+<span id="cb6-29"><a href="#cb6-29" tabindex="-1"></a><span class="co">#&gt;     FALSE           cpu</span></span>
+<span id="cb6-30"><a href="#cb6-30" tabindex="-1"></a><span class="co">#&gt;     FALSE           cpu</span></span>
+<span id="cb6-31"><a href="#cb6-31" tabindex="-1"></a><span class="co">#&gt;     FALSE           cpu</span></span></code></pre></div>
+<p>For a GPU comparison, rerun the CUDA workflow above on the same input
+and compare numerical results within an appropriate tolerance. PCA
+vectors may differ in sign, so compare reconstruction or subspaces
+instead of raw loading signs. Check neighbour indices and distances,
+including distance ties, and retain the runtime diagnostics and
+provenance with the results.</p>
+<p>Package installation and ordinary checks do not require CUDA.
+Hardware validation must actually execute the CUDA calls, verify the
+selected backend and recorded stages, and check numerical agreement; a
+skipped GPU example or job is not evidence of a successful hardware
+test.</p>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

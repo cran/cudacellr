@@ -1,0 +1,32 @@
+Package: cudacellr
+Title: GPU-Aware Single-Cell Analysis Workflows
+Version: 0.4.0
+Authors@R: 
+    person("Yaoxiang", "Li", email = "liyaoxiang@outlook.com",
+           role = c("aut", "cre"))
+Description: Provides single-cell analysis primitives
+    for sparse count matrices, including library-size normalization,
+    log-normalization, highly variable feature selection, principal component
+    analysis, and nearest-neighbour construction. Integrates the 'cudaverse'
+    numerical and sparse layers while preserving matrix identifiers and
+    recording the computation backend for each stage.
+    Optional adapters preserve native 'SingleCellExperiment' and
+    'SeuratObject' version 5 object structures.
+License: MIT + file LICENSE
+URL: https://cudaverse.github.io/cudacellr/,
+        https://github.com/cudaverse/cudacellr
+BugReports: https://github.com/cudaverse/cudacellr/issues
+Encoding: UTF-8
+Imports: cudaverse (>= 0.4.1), Matrix, methods
+Suggests: DelayedArray, knitr, rmarkdown, S4Vectors, SeuratObject (>=
+        5.0.0), SingleCellExperiment, SummarizedExperiment, testthat
+        (>= 3.0.0)
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0
+NeedsCompilation: no
+Packaged: 2026-10-07 18:09:04 UTC; Li
+Author: Yaoxiang Li [aut, cre]
+Maintainer: Yaoxiang Li <liyaoxiang@outlook.com>
+Repository: CRAN
+Date/Publication: 2026-10-27 18:00:14 UTC
